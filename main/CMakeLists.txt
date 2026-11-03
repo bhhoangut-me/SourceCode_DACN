@@ -1,3 +1,22 @@
-idf_component_register(SRCS "main.c"
-                              "tasks/control_task.c"
-                    INCLUDE_DIRS "." "tasks")
+idf_component_register(
+    SRCS
+        "main.c"
+        "control/pid.c"
+        "control/speed_control.c"
+        "drivers/mg90s.c"
+        "drivers/jgb37_motor.c"
+        "drivers/jgb37_encoder.c"
+        "drivers/tctr5000.c"
+        "drivers/vl53l0x.c"
+        "tasks/control_task.c"
+        "tasks/obstacle_task.c"
+        "tasks/state_task.c"
+        "communication/wifi.c"
+    INCLUDE_DIRS
+        "."
+        "config"
+        "control"
+        "drivers"
+        "tasks"
+        "communication"
+)
