@@ -296,7 +296,7 @@ void Control_Task(void *pvParameters) {
 
     // 6. Lọc thông thấp góc lái servo (anti-jitter) để chống rung giật cơ học
     static float s_filtered_gamma = 0.0f;
-    s_filtered_gamma = 0.4f * s_filtered_gamma + 0.6f * gamma;
+    s_filtered_gamma = 0.3f * s_filtered_gamma + 0.7f * gamma;
 
     s_current_steer_rad = s_filtered_gamma;
     mg90s_set_angle_rad(s_filtered_gamma);
@@ -306,8 +306,8 @@ void Control_Task(void *pvParameters) {
     float abs_gamma_deg = fabsf(gamma * RAD_TO_DEG);
     float cornering_factor = 1.0f;
     if (abs_gamma_deg > 10.0f) {
-      // Góc lái từ 10 độ đến 35 độ: giảm ga từ 100% xuống 70%
-      cornering_factor = 1.0f - 0.30f * ((abs_gamma_deg - 10.0f) / 25.0f);
+      // Góc lái từ 10 độ đến 45 độ: giảm ga từ 100% xuống 70%
+      cornering_factor = 1.0f - 0.30f * ((abs_gamma_deg - 10.0f) / 35.0f);
       if (cornering_factor < 0.70f)
         cornering_factor = 0.70f;
     }
