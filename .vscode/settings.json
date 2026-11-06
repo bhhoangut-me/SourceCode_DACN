@@ -25,5 +25,10 @@
     "--query-driver=**",
     "--compile-commands-dir=c:\\Users\\Administrator\\Desktop\\From_GIT\\DACN\\DACN\\build"
   ],
-  "idf.currentSetup": "D:/ESP_IDF/Espressif/frameworks/esp-idf-v5.3.1/"
+  "idf.currentSetup": "D:/ESP_IDF/Espressif/frameworks/esp-idf-v5.3.1/",
+  "idf.flashType": "UART",
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32"
+  },
+  "idf.port": "COM20"
 }

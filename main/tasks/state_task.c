@@ -40,7 +40,7 @@ void state_manager_init(void) {
 }
 
 robot_state_t state_get_current(void) {
-    robot_state_t st = ROBOT_STATE_STOPPED;
+    robot_state_t st = s_current_state;
     if (s_state_mutex && xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
         st = s_current_state;
         xSemaphoreGive(s_state_mutex);

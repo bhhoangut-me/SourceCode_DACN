@@ -88,7 +88,7 @@ Hệ thống sử dụng pin chính **LiPo 3S 11.1V (2200 mAh, 35C)**:
 * **Độ cao lắp đặt**: $h = 7\text{ mm}$ (cho độ chênh lệch ADC lớn nhất giữa vạch đen $2859$ và nền trắng $420$, $\Delta = 2439$).
 * **Bước mắt cảm biến**: $p = 13\text{ mm}$ ($w_l / 2 = 26 / 2$).
 * **Tọa độ các cảm biến so với tâm xe**: $x_i = [-39, -26, -13, 0, 13, 26, 39]\text{ mm}$ (tổng bề rộng quét $L = 78\text{ mm}$).
-* **Giao tiếp MUX**: 7 ngõ ra analog nối vào ngõ $Y0 \div Y6$ của IC **HEF4051B**, quét tuần tự qua 3 chân GPIO Select (ss1, ss2, ss3) và đọc về 1 chân duy nhất `GPIO 32` (ADC1 Channel 4 của ESP32).
+* **Giao tiếp MUX**: 7 ngõ ra analog nối vào ngõ $Y0 \div Y6$ của IC **HEF4051B**, quét tuần tự qua 3 chân GPIO Select (ss1: GPIO 19, ss2: GPIO 18, ss3: GPIO 17) và đọc về 1 chân duy nhất `GPIO 36` (ADC1 Channel 0 của ESP32).
 
 ### 3.3. Cảm biến Khoảng cách Laser VL53L0X
 * **Nguyên lý**: Đo thời gian bay của chùm laser (Time-of-Flight), bước sóng $940\text{ nm}$, không bị ảnh hưởng bởi màu sắc bề mặt.

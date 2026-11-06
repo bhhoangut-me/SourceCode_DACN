@@ -48,7 +48,7 @@ static const float LINE_SENSOR_POS_MM[LINE_SENSOR_COUNT] = {
  * -------------------------------------------------------------------------- */
 #define LYAPUNOV_K1                 1.5f        // Hệ số bù sai số dọc e1
 #define LYAPUNOV_K2                 0.00015f    // Hệ số ổn định sai số lệch ngang e2
-#define LYAPUNOV_K3                 10.0f       // Hệ số ổn định góc hướng e3
+#define LYAPUNOV_K3                 5.0f        // Hệ số ổn định góc hướng e3 (giảm từ 10.0 để chống lắc servo)
 
 /* --------------------------------------------------------------------------
  * 5. BỘ ĐIỀU KHIỂN TỐC ĐỘ ĐỘNG CƠ PI - INNER LOOP (CHAPTER 5.6)

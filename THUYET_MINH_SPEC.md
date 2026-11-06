@@ -102,26 +102,22 @@
 ---
 
 ## 5. CẤU HÌNH SƠ ĐỒ CHÂN (PINOUT MAP)
-Theo sơ đồ nguyên lý mạch điều khiển (Hình 4.16) và `pin_config.h`:
+Theo sơ đồ chân phần cứng thực tế và `pin_config.h`:
 | Chức năng | Ký hiệu trong mạch | Chân GPIO ESP32 | Ghi chú |
 | :--- | :--- | :--- | :--- |
 | **Encoder Kênh A** | ENC_A | GPIO 34 | Input only |
 | **Encoder Kênh B** | ENC_B | GPIO 35 | Input only |
-| **Động cơ DC - PWM 1** | TB67_IN1 / PWM1 | GPIO 27 | Điều khiển tốc độ/chiều |
-| **Động cơ DC - PWM 2** | TB67_IN2 / PWM2 | GPIO 14 | Điều khiển tốc độ/chiều |
-| **Servo Lái MG90S** | MG90S_PWM | GPIO 16 | PWM 50 Hz |
-| **Line Mux Select 1** | ss1 | GPIO 26 | HEF4051B S0/A |
-| **Line Mux Select 2** | ss2 | GPIO 25 | HEF4051B S1/B |
-| **Line Mux Select 3** | ss3 | GPIO 33 | HEF4051B S2/C |
-| **Line Mux ADC Out** | z | GPIO 32 | ADC1 CH4 |
-| **VL53L0X SDA** | SDA | GPIO 21 | I2C Data |
-| **VL53L0X SCL** | SCL | GPIO 22 | I2C Clock |
-| **SPI SCK** | SCK | GPIO 18 | Mở rộng |
-| **SPI MISO** | MISO | GPIO 19 | Mở rộng |
-| **SPI MOSI** | MOSI | GPIO 23 | Mở rộng |
-| **SPI CS** | CS | GPIO 5 | Mở rộng |
-| **Status LED Red** | LED_R | GPIO 17 | Báo trạng thái |
-| **Status LED Green** | LED_G | GPIO 15 | Báo trạng thái |
+| **Động cơ DC - PWM 1** | TB67_IN1 / PWM1 | GPIO 32 | Điều khiển tốc độ/chiều |
+| **Động cơ DC - PWM 2** | TB67_IN2 / PWM2 | GPIO 33 | Điều khiển tốc độ/chiều |
+| **Servo Lái MG90S** | MG90S_PWM | GPIO 25 | PWM 50 Hz |
+| **Line Mux Select 1** | ss1 | GPIO 19 | HEF4051B S0/A (LSB) |
+| **Line Mux Select 2** | ss2 | GPIO 18 | HEF4051B S1/B |
+| **Line Mux Select 3** | ss3 | GPIO 17 | HEF4051B S2/C (MSB) |
+| **Line Mux ADC Out** | z | GPIO 36 | ADC1 CH0 (SENSOR_VP) |
+| **VL53L0X SDA** | SDA | GPIO 16 | I2C Data |
+| **VL53L0X SCL** | SCL | GPIO 4 | I2C Clock |
+| **Status LED Red** | LED_R | GPIO 27 | Báo trạng thái |
+| **Status LED Green** | LED_G | GPIO 26 | Báo trạng thái |
 | **UART RX / TX** | RX0 / TX0 | GPIO 3 / GPIO 1 | Nạp & Debug |
 | **Boot Mode** | BOOT | GPIO 0 | Pull-up / Boot |
 

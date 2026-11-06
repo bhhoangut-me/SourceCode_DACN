@@ -12,6 +12,7 @@ idf_component_register(
         "tasks/obstacle_task.c"
         "tasks/state_task.c"
         "communication/wifi.c"
+        "communication/web_server.c"
     INCLUDE_DIRS
         "."
         "config"
@@ -19,4 +20,18 @@ idf_component_register(
         "drivers"
         "tasks"
         "communication"
+    EMBED_TXTFILES
+        "web/dashboard.html"
+    REQUIRES
+        esp_adc
+        esp_http_server
+        app_update
+        esp_wifi
+        esp_netif
+        esp_event
+        esp_rom
+        json
+        nvs_flash
+        driver
+        esp_timer
 )

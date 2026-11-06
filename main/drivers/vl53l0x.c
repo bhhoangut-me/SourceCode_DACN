@@ -83,15 +83,15 @@ esp_err_t vl53l0x_read_distance_mm(uint16_t *raw_dist_mm, float *calib_dist_mm) 
     esp_err_t err = i2c_write_byte(VL53L0X_REG_SYSRANGE_START, 0x01);
     if (err != ESP_OK) return err;
 
-    // 2. Chờ kết quả đo sẵn sàng (tối đa 100ms)
+    // 2. Chờ kết quả đo sẵn sàng (tối đa ~200ms)
     uint8_t status = 0;
-    int timeout = 50;
+    int timeout = 20; // 20 chu kỳ x 10ms = 200ms
     while (timeout-- > 0) {
         err = i2c_read_byte(VL53L0X_REG_RESULT_RANGE_STATUS, &status);
         if (err == ESP_OK && (status & 0x01)) {
             break;
         }
-        vTaskDelay(pdMS_TO_TICKS(2));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 
     if (timeout <= 0) {
