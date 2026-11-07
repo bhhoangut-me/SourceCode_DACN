@@ -56,11 +56,11 @@ static const float LINE_SENSOR_POS_MM[LINE_SENSOR_COUNT] = {
  * -------------------------------------------------------------------------- */
 #define LYAPUNOV_K1 1.5f // Hệ số bù sai số dọc e1
 #define LYAPUNOV_K2                                                            \
-  0.00018f // Hệ số ổn định sai số lệch ngang e2 (giữ tâm đường thẳng & đủ góc
-           // 28.9 độ ôm cua R500 cho cảm biến đầu xe 290mm)
+  0.00018f // Hệ số cơ sở sai số lệch ngang e2 (kết hợp hàm nén bậc 3 quanh tâm
+           // giữ êm đường thẳng & mở đủ góc 28.6..38 độ ôm cua R500)
 #define LYAPUNOV_K3                                                            \
-  1.0f // Hệ số ổn định góc hướng e3 (tối ưu cho cảm biến đầu xe l2 = 290mm có
-       // giảm chấn hình học tự nhiên lớn, chống rung lắc tần số cao)
+  0.40f // Hệ số giảm chấn góc hướng e3 (cảm biến mũi xe l2 = 290mm đã có giảm
+        // chấn hình học tự nhiên lớn, giảm K3 tránh tự kích nhiễu quét mũi xe)
 
 /* --------------------------------------------------------------------------
  * 5. BỘ ĐIỀU KHIỂN TỐC ĐỘ ĐỘNG CƠ PI - INNER LOOP (CHAPTER 5.6)
