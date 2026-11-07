@@ -80,7 +80,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f
 
   <!-- Card: Cảm biến dò line -->
   <div class="card">
-    <h2>📡 Mảng Cảm Biến Dò Line (TCRT5000)</h2>
+    <h2>📡 Mảng Cảm Biến Dò Line (8 Mắt IR - Bước 8mm)</h2>
     <div class="sensor-bar-container" id="sensor-bars">
       <div class="sensor-bar" style="height:120px"><div class="fill" id="sb0"></div><div class="val" id="sv0">0</div><div class="lbl">S1</div></div>
       <div class="sensor-bar" style="height:120px"><div class="fill" id="sb1"></div><div class="val" id="sv1">0</div><div class="lbl">S2</div></div>
@@ -89,9 +89,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f
       <div class="sensor-bar" style="height:120px"><div class="fill" id="sb4"></div><div class="val" id="sv4">0</div><div class="lbl">S5</div></div>
       <div class="sensor-bar" style="height:120px"><div class="fill" id="sb5"></div><div class="val" id="sv5">0</div><div class="lbl">S6</div></div>
       <div class="sensor-bar" style="height:120px"><div class="fill" id="sb6"></div><div class="val" id="sv6">0</div><div class="lbl">S7</div></div>
+      <div class="sensor-bar" style="height:120px"><div class="fill" id="sb7"></div><div class="val" id="sv7">0</div><div class="lbl">S8</div></div>
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:24px;font-size:12px;color:#64748b">
-      <span>← Trái (-39mm)</span><span>Tâm (0mm)</span><span>Phải (+39mm) →</span>
+      <span>← Trái (-28mm)</span><span>Tâm (0mm)</span><span>Phải (+28mm) →</span>
     </div>
   </div>
 
@@ -210,13 +211,13 @@ function updateUI(d) {
     }
   }
 
-  // e2 indicator (-39 to +39 mm)
-  const e2Pct = Math.max(0, Math.min(100, ((d.e2 || 0) + 39) / 78 * 100));
+  // e2 indicator (-28 to +28 mm, span 56mm)
+  const e2Pct = Math.max(0, Math.min(100, ((d.e2 || 0) + 28) / 56 * 100));
   document.getElementById('e2-marker').style.left = e2Pct + '%';
 
-  // Sensor bars
-  const adc = d.adc || [0,0,0,0,0,0,0];
-  for (let i = 0; i < 7; i++) {
+  // Sensor bars (8 sensors)
+  const adc = d.adc || [0,0,0,0,0,0,0,0];
+  for (let i = 0; i < 8; i++) {
     const pct = Math.min(100, adc[i] / 4095 * 100);
     const bar = document.getElementById('sb' + i);
     bar.style.height = Math.max(2, pct) + '%';

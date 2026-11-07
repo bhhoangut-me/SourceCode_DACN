@@ -16,6 +16,54 @@ static const char *TAG = "CONTROL_TASK";
 #define RAD_TO_DEG (180.0f / 3.14159265358979323846f)
 #endif
 
+/* ==========================================================================
+ * ADAPTIVE EMA (Exponential Moving Average) - Bộ lọc thích nghi
+ * --------------------------------------------------------------------------
+ * Thay thế bộ lọc IIR cố định (fixed-alpha) bằng bộ lọc EMA có alpha tự
+ * điều chỉnh theo tốc độ biến thiên tín hiệu:
+ *
+ *   alpha = alpha_min + (alpha_max - alpha_min) * |delta| / (|delta| + S)
+ *
+ * Trong đó:
+ *   delta = new_value - current_filtered_value  (biến thiên tức thời)
+ *   S     = sensitivity  (hằng số điều chỉnh độ nhạy)
+ *
+ * - Đường thẳng:  |delta| << S  →  alpha ≈ alpha_min  →  lọc mạnh (mượt)
+ * - Vào cua:      |delta| >> S  →  alpha ≈ alpha_max  →  phản ứng nhanh
+ * ========================================================================== */
+
+typedef struct {
+  float alpha_min;   // Alpha tối thiểu (lọc mạnh, đường thẳng)
+  float alpha_max;   // Alpha tối đa (phản ứng nhanh, vào cua)
+  float sensitivity; // Hằng số nhạy S: |delta| = S → alpha ở giữa
+  float value;       // Giá trị đã lọc hiện tại
+} adaptive_ema_t;
+
+/**
+ * @brief Khởi tạo bộ lọc Adaptive EMA
+ */
+static inline void adaptive_ema_init(adaptive_ema_t *f, float alpha_min,
+                                     float alpha_max, float sensitivity,
+                                     float initial_value) {
+  f->alpha_min = alpha_min;
+  f->alpha_max = alpha_max;
+  f->sensitivity = sensitivity;
+  f->value = initial_value;
+}
+
+/**
+ * @brief Cập nhật bộ lọc Adaptive EMA với mẫu mới
+ * @return Giá trị đã lọc
+ */
+static inline float adaptive_ema_update(adaptive_ema_t *f, float new_value) {
+  float delta = fabsf(new_value - f->value);
+  // Logistic-like transition: delta = 0 → alpha_min, delta → ∞ → alpha_max
+  float alpha = f->alpha_min + (f->alpha_max - f->alpha_min) * delta /
+                                   (delta + f->sensitivity);
+  f->value = (1.0f - alpha) * f->value + alpha * new_value;
+  return f->value;
+}
+
 static speed_controller_t s_speed_ctrl;
 static line_sensor_data_t s_line_data;
 
@@ -33,6 +81,7 @@ static float s_current_steer_rad = 0.0f;
 static float s_prev_e2_m = 0.0f;
 static uint32_t s_lost_line_counter = 0;
 static uint32_t s_intersection_counter = 0;
+static uint32_t s_post_intersection_ticks = 0;
 static bool s_has_passed_intersection = false;
 
 void control_system_init(void) {
@@ -107,6 +156,29 @@ void Control_Task(void *pvParameters) {
   const TickType_t xFrequency = pdMS_TO_TICKS(MOTOR_CONTROL_PERIOD_MS);
   const float dt = (float)MOTOR_CONTROL_PERIOD_MS / 1000.0f; // 0.01s
 
+  /* Khởi tạo 3 bộ lọc Adaptive EMA ------------------------------------ */
+
+  // Bộ lọc 1: e2 (sai số lệch ngang, mảng 8 cảm biến bước 8mm)
+  //   - Đường thẳng: alpha_min=0.25 → lọc nhiễu ADC nhưng giảm trễ pha
+  //   - Vào cua: alpha_max=0.85 → bám sát tín hiệu thật tức thời
+  //   - sensitivity=5.0 mm: ngưỡng chuyển tiếp mượt giữa thẳng và cua
+  adaptive_ema_t ema_e2;
+  adaptive_ema_init(&ema_e2, 0.25f, 0.85f, 5.0f, 0.0f);
+
+  // Bộ lọc 2: de2/dt (đạo hàm sai số lệch ngang, đơn vị m/s)
+  //   - Đường thẳng: alpha_min=0.35 → khử trễ pha 90ms để K3 trả lái sớm nhịp
+  //   - Vào cua: alpha_max=0.75 → phản ánh nhanh tốc độ lệch ngang
+  //   - sensitivity=0.15 m/s: tương đương e2 thay đổi ~1.5mm/chu kỳ
+  adaptive_ema_t ema_de2;
+  adaptive_ema_init(&ema_de2, 0.35f, 0.75f, 0.15f, 0.0f);
+
+  // Bộ lọc 3: gamma (góc lái servo, đơn vị rad)
+  //   - Đường thẳng: alpha_min=0.55 → không làm trễ lệnh giảm chấn trả lái
+  //   - Vào cua: alpha_max=0.90 → bẻ lái gần như tức thời
+  //   - sensitivity=0.10 rad (~5.7°): biến thiên 5.7° → alpha ở giữa
+  adaptive_ema_t ema_gamma;
+  adaptive_ema_init(&ema_gamma, 0.55f, 0.90f, 0.10f, 0.0f);
+
   while (1) {
     // Duy trì chu kỳ lấy mẫu chính xác 10 ms
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
@@ -124,13 +196,15 @@ void Control_Task(void *pvParameters) {
       s_log_counter = 0;
       ESP_LOGI(
           TAG,
-          "ADC: [S1:%4d S2:%4d S3:%4d S4:%4d S5:%4d S6:%4d S7:%4d] | e2:%5.1f "
+          "ADC: [S1:%4d S2:%4d S3:%4d S4:%4d S5:%4d S6:%4d S7:%4d S8:%4d] | "
+          "e2:%5.1f "
           "mm | RPM:%5.0f | PWM:%3.0f | St:%d%s",
           s_line_data.raw_adc[0], s_line_data.raw_adc[1],
           s_line_data.raw_adc[2], s_line_data.raw_adc[3],
           s_line_data.raw_adc[4], s_line_data.raw_adc[5],
-          s_line_data.raw_adc[6], s_line_data.position_mm, current_motor_rpm,
-          s_speed_ctrl.output_pwm, (int)state,
+          s_line_data.raw_adc[6], s_line_data.raw_adc[7],
+          s_line_data.position_mm, current_motor_rpm, s_speed_ctrl.output_pwm,
+          (int)state,
           s_line_data.line_lost
               ? " (LOST)"
               : (s_line_data.intersection_detected ? " (INTERSECTION)" : ""));
@@ -149,8 +223,13 @@ void Control_Task(void *pvParameters) {
       jgb37_motor_stop();
       mg90s_set_angle_deg(0.0f);
       speed_control_reset(&s_speed_ctrl);
+      ema_e2.value = s_line_data.position_mm;
+      ema_de2.value = 0.0f;
+      ema_gamma.value = 0.0f;
+      s_prev_e2_m = s_line_data.position_m;
       s_lost_line_counter = 0;
       s_intersection_counter = 0;
+      s_post_intersection_ticks = 0;
       s_has_passed_intersection = false;
       continue;
     }
@@ -159,6 +238,10 @@ void Control_Task(void *pvParameters) {
       jgb37_motor_brake();
       mg90s_set_angle_deg(0.0f);
       speed_control_reset(&s_speed_ctrl);
+      ema_e2.value = s_line_data.position_mm;
+      ema_de2.value = 0.0f;
+      ema_gamma.value = 0.0f;
+      s_prev_e2_m = s_line_data.position_m;
       continue;
     }
 
@@ -178,12 +261,18 @@ void Control_Task(void *pvParameters) {
         s_intersection_counter = 0;
       }
 
-      // Kiểm tra mất line (khi đã đi qua ngã rẽ và tới vạch đích)
+      if (s_has_passed_intersection) {
+        s_post_intersection_ticks++;
+      }
+
+      // Kiểm tra mất line tại vạch đích:
+      // Vì cảm biến gắn ở đầu mũi xe (l2 = 290mm), khi hết vạch đích chỉ cần
+      // lọc 6 chu kỳ (60ms) là phanh ngay để không chạy lố vạch (sai số <= 5mm).
+      // Đồng thời yêu cầu đã qua ngã rẽ > 1.0s (100 chu kỳ) để tránh dừng nhầm ở cua R800.
       if (s_line_data.line_lost) {
         s_lost_line_counter++;
-        // Nếu mất line liên tục quá 35 chu kỳ (350ms) sau khi đã qua ngã rẽ ->
-        // Đã về đích!
-        if (s_has_passed_intersection && s_lost_line_counter >= 35) {
+        if (s_has_passed_intersection && s_post_intersection_ticks > 100 &&
+            s_lost_line_counter >= 6) {
           ESP_LOGI(TAG,
                    "Da ve dich! Tien hanh dung xe (Thoa sai so dung <= 5mm)");
           state_set(ROBOT_STATE_FINISH);
@@ -201,28 +290,36 @@ void Control_Task(void *pvParameters) {
     float gamma = 0.0f;
 
     if (state == ROBOT_STATE_INTERSECTION) {
-      // Đang ở vùng ngã ba: bẻ lái theo nhánh đã chọn
+      // Đang ở vùng ngã ba: bẻ lái theo nhánh đã chọn (bán kính cong R = 800 mm,
+      // chiều dài cơ sở l = 225 mm -> góc lái chuẩn arctan(0.225 / 0.8) = 15.7 độ)
       route_selection_t route = state_get_selected_route();
       if (route == ROUTE_UPPER) {
         // Nhánh trên: Bẻ lái sang TRÁI (bán kính cong R = 800 mm)
-        // gamma = arctan(l1 / R)
-        gamma = atan2f(ROBOT_L1_M, 0.8f);
+        gamma = atan2f(ROBOT_LENGTH_M, 0.8f);
       } else {
-        // Nhánh dưới: Bẻ lái sang PHẢI / Giữ thẳng (bán kính cong R = 800 mm)
-        gamma = -atan2f(ROBOT_L1_M, 0.8f);
+        // Nhánh dưới: Bẻ lái sang PHẢI (bán kính cong R = 800 mm)
+        gamma = -atan2f(ROBOT_LENGTH_M, 0.8f);
       }
 
       // Vận tốc qua khúc rẽ duy trì ổn định
       v_cmd = s_target_linear_speed * 0.75f;
 
+      // Đồng bộ bộ nhớ sai số để khi thoát ngã rẽ không bị giật đạo hàm de2_dt
+      ema_e2.value = s_line_data.position_mm;
+      ema_de2.value = 0.0f;
+      s_prev_e2_m = s_line_data.position_m;
+
       s_intersection_counter++;
-      // Sau khi bẻ lái một khoảng (~0.5s) hoặc khi mảng cảm biến đã bám lại 1
-      // line duy nhất
-      if (s_intersection_counter > 50 ||
-          (s_intersection_counter > 20 &&
-           s_line_data.active_sensor_count <= 2)) {
+      // Do cảm biến đầu xe (290mm) chạm ngã ba sớm hơn trục bánh lái trước (225mm)
+      // một khoảng 65mm, giữ góc rẽ tối thiểu 30 chu kỳ (0.3s) cho bánh trước vào
+      // hẳn nhánh mới (1 line đơn 26mm phủ 2-4 mắt bước 8mm), tối đa 60 chu kỳ (0.6s)
+      if (s_intersection_counter > 60 ||
+          (s_intersection_counter > 30 &&
+           s_line_data.active_sensor_count >= 2 &&
+           s_line_data.active_sensor_count <= 4)) {
         ESP_LOGI(TAG, "Da qua nga re thanh cong, tiep tuc bam line don");
         s_has_passed_intersection = true;
+        s_post_intersection_ticks = 0;
         s_intersection_counter = 0;
         state_set(ROBOT_STATE_LINE_TRACKING);
       }
@@ -233,27 +330,25 @@ void Control_Task(void *pvParameters) {
 
       // e2: Sai số vị trí lệch ngang (mm trong thuyết minh mục 5.2.3)
       float e2_mm = s_line_data.position_mm;
-      float e2_m = s_line_data.position_m;
 
-      // e2: Lọc thông thấp tín hiệu e2 trước khi tính đạo hàm để triệt nhiễu
-      // ADC
-      static float s_filtered_e2_mm = 0.0f;
-      s_filtered_e2_mm = 0.7f * s_filtered_e2_mm + 0.3f * e2_mm;
-      float filtered_e2_m = s_filtered_e2_mm / 1000.0f;
+      // e2: Lọc Adaptive EMA tín hiệu e2 - tự điều chỉnh alpha theo tốc độ
+      // biến thiên: đường thẳng (alpha nhỏ, lọc mạnh) vs vào cua (alpha lớn,
+      // bám nhanh)
+      float filtered_e2_mm = adaptive_ema_update(&ema_e2, e2_mm);
+      float filtered_e2_m = filtered_e2_mm / 1000.0f;
 
       // e3: Sai số góc hướng (ước lượng từ đạo hàm của sai số lệch ngang: de2 /
       // dt = v * sin(e3))
       float de2_dt = (filtered_e2_m - s_prev_e2_m) / dt;
       s_prev_e2_m = filtered_e2_m;
 
-      // Lọc thông thấp mạnh trên đạo hàm de2_dt (alpha = 0.15) để servo bẻ lái
-      // mượt mà
-      static float s_filtered_de2 = 0.0f;
-      s_filtered_de2 = 0.85f * s_filtered_de2 + 0.15f * de2_dt;
+      // Lọc Adaptive EMA trên đạo hàm de2_dt: đường thẳng → cực mượt,
+      // vào cua → phản ứng nhanh
+      float filtered_de2 = adaptive_ema_update(&ema_de2, de2_dt);
 
       float sin_e3 = 0.0f;
       if (v_cmd > 0.01f) {
-        sin_e3 = s_filtered_de2 / v_cmd;
+        sin_e3 = filtered_de2 / v_cmd;
         if (sin_e3 > 1.0f)
           sin_e3 = 1.0f;
         if (sin_e3 < -1.0f)
@@ -269,7 +364,7 @@ void Control_Task(void *pvParameters) {
       // Sử dụng e2 đã lọc để giảm rung servo
       float v_d_mms = s_target_linear_speed * 1000.0f;
       omega_cmd =
-          (LYAPUNOV_K2 * v_d_mms * s_filtered_e2_mm) + (LYAPUNOV_K3 * sin_e3);
+          (LYAPUNOV_K2 * v_d_mms * filtered_e2_mm) + (LYAPUNOV_K3 * sin_e3);
 
       // Vận tốc dài điều khiển:
       v_cmd = s_target_linear_speed * cosf(e3) + (LYAPUNOV_K1 * e1);
@@ -277,16 +372,17 @@ void Control_Task(void *pvParameters) {
         v_cmd = ROBOT_SPEED_MIN_MPS;
 
       // Quy đổi sang góc lái Servo theo mô hình động học xe đạp (Bicycle
-      // Model): tan(gamma) = (L * omega) / v Sử dụng L1 (0.05 m) thay vì LENGTH
-      // (0.225 m) theo đúng thuyết minh mục 5.2.4 L1 = khoảng cách từ trục sau
-      // đến trục lái trước
-      gamma = atan2f(ROBOT_L1_M * omega_cmd, v_cmd);
+      // Model): tan(gamma) = (L * omega) / v Sử dụng chiều dài cơ sở hiệu dụng
+      // L_steer = 0.12m (thay vì 0.05m quá nhỏ làm tụt góc lái khi vào giữa cua
+      // R500, và nhỏ hơn 0.225m để triệt tiêu rung giật trên đường thẳng)
+      const float ROBOT_L_STEER_EFF_M = 0.12f;
+      gamma = atan2f(ROBOT_L_STEER_EFF_M * omega_cmd, v_cmd);
 
       // Xử lý chống văng khỏi khúc cua khi mất line tạm thời:
       // Nếu line vọt ra ngoài mép cảm biến, ép bẻ hết góc lái theo hướng vừa rẽ
       // để ôm lại line
       if (s_line_data.line_lost) {
-        if (s_filtered_e2_mm > 0.0f) {
+        if (filtered_e2_mm > 0.0f) {
           gamma = ROBOT_MAX_STEER_ANGLE_RAD;
         } else {
           gamma = -ROBOT_MAX_STEER_ANGLE_RAD;
@@ -294,22 +390,23 @@ void Control_Task(void *pvParameters) {
       }
     }
 
-    // 6. Lọc thông thấp góc lái servo (anti-jitter) để chống rung giật cơ học
-    static float s_filtered_gamma = 0.0f;
-    s_filtered_gamma = 0.3f * s_filtered_gamma + 0.7f * gamma;
+    // 6. Lọc Adaptive EMA góc lái servo: đường thẳng → servo chuyển mượt,
+    //    vào cua → bẻ lái gần tức thời (anti-jitter thích nghi)
+    float filtered_gamma = adaptive_ema_update(&ema_gamma, gamma);
 
-    s_current_steer_rad = s_filtered_gamma;
-    mg90s_set_angle_rad(s_filtered_gamma);
+    s_current_steer_rad = filtered_gamma;
+    mg90s_set_angle_rad(filtered_gamma);
 
     // Tính hệ số tự động giảm tốc khi vào cua gắt để chống văng xe (Cornering
     // Speed Reduction)
     float abs_gamma_deg = fabsf(gamma * RAD_TO_DEG);
     float cornering_factor = 1.0f;
     if (abs_gamma_deg > 10.0f) {
-      // Góc lái từ 10 độ đến 45 độ: giảm ga từ 100% xuống 70%
-      cornering_factor = 1.0f - 0.30f * ((abs_gamma_deg - 10.0f) / 35.0f);
-      if (cornering_factor < 0.70f)
-        cornering_factor = 0.70f;
+      // Góc lái từ 10 độ đến 55 độ: giảm ga từ 100% xuống 65% để ôm trọn cua
+      // R500
+      cornering_factor = 1.0f - 0.35f * ((abs_gamma_deg - 10.0f) / 45.0f);
+      if (cornering_factor < 0.65f)
+        cornering_factor = 0.65f;
     }
 
     // 7. Vòng điều khiển vận tốc (Hỗ trợ chế độ Manual PWM hoặc Auto PI)

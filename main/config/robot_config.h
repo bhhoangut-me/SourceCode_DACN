@@ -13,11 +13,13 @@
  * -------------------------------------------------------------------------- */
 #define ROBOT_MASS_KG 1.5f    // Khối lượng xe M (kg)
 #define ROBOT_WIDTH_M 0.15f   // Vệt bánh sau w (m) = 150 mm
-#define ROBOT_LENGTH_M 0.225f // Chiều dài cơ sở l (m) = 225 mm
+#define ROBOT_LENGTH_M                                                         \
+  0.225f // Chiều dài cơ sở trục sau -> trục lái trước l (m) = 225 mm
 #define ROBOT_L1_M                                                             \
-  0.05f // Khoảng cách từ trục sau đến trục lái / CG l1 (m) = 50 mm
+  0.05f // Khoảng cách từ trục sau đến trọng tâm G l1 (m) = 50 mm (Chương 3)
 #define ROBOT_L2_M                                                             \
-  0.175f // Khoảng cách từ trọng tâm G / trục sau đến cảm biến l2 (m)
+  0.290f // Khoảng cách từ trục sau đến mảng cảm biến đầu xe l2 (m) = 290 mm
+         // (Bản vẽ lắp A0)
 #define ROBOT_CG_HEIGHT_M 0.05f // Chiều cao trọng tâm h (m) = 50 mm
 
 #define WHEEL_DIAMETER_M 0.08f // Đường kính bánh dẫn động sau D (m) = 80 mm
@@ -25,20 +27,18 @@
 #define DIFF_GEAR_RATIO 2.5f // Tỉ số truyền cụm vi sai u_dg = 2.5
 
 /* --------------------------------------------------------------------------
- * 2. CẢM BIẾN DÒ LINE TCRT5000 (CHAPTER 4)
+ * 2. CẢM BIẾN DÒ LINE (MẢNG 8 LED IR, BƯỚC 8MM) (CHAPTER 4)
  * -------------------------------------------------------------------------- */
-#define LINE_SENSOR_COUNT 7 // 7 cảm biến TCRT5000 qua HEF4051B
-#define LINE_SENSOR_PITCH_MM                                                   \
-  13.0f // Bước cảm biến p = 13 mm (w_line / 2 = 26 / 2)
-#define LINE_WIDTH_MM 26.0f // Bề rộng vạch line đen = 26 mm
-#define LINE_SENSOR_SPAN_MM                                                    \
-  78.0f // Chiều dài phủ mảng cảm biến (7-1)*13 = 78 mm
-#define LINE_SENSOR_HEIGHT_MM                                                  \
-  7.0f // Chiều cao tối ưu h = 7 mm (chênh lệch ADC max ~ 2439)
+#define LINE_SENSOR_COUNT 8 // 8 cảm biến IR qua HEF4051B (kênh Y0 - Y7)
+#define LINE_SENSOR_PITCH_MM 8.0f // Bước cảm biến p = 8 mm
+#define LINE_WIDTH_MM 26.0f       // Bề rộng vạch line đen = 26 mm
+#define LINE_SENSOR_SPAN_MM 56.0f // Chiều dài phủ mảng cảm biến (8-1)*8 = 56 mm
+#define LINE_SENSOR_HEIGHT_MM 7.0f // Chiều cao tối ưu h = 7 mm
 
-// Tọa độ các mắt cảm biến so với tâm xe (mm): {-39, -26, -13, 0, 13, 26, 39}
+// Tọa độ các mắt cảm biến so với tâm xe (mm): {-28, -20, -12, -4, 4, 12, 20,
+// 28}
 static const float LINE_SENSOR_POS_MM[LINE_SENSOR_COUNT] = {
-    -39.0f, -26.0f, -13.0f, 0.0f, 13.0f, 26.0f, 39.0f};
+    -28.0f, -20.0f, -12.0f, -4.0f, 4.0f, 12.0f, 20.0f, 28.0f};
 
 /* --------------------------------------------------------------------------
  * 3. CẢM BIẾN VẬT CẢN VL53L0X (CHAPTER 5.4 & CHAPTER 6)
@@ -54,10 +54,13 @@ static const float LINE_SENSOR_POS_MM[LINE_SENSOR_COUNT] = {
 /* --------------------------------------------------------------------------
  * 4. BỘ ĐIỀU KHIỂN BÁM QUỸ ĐẠO LYAPUNOV - OUTER LOOP (CHAPTER 5.2)
  * -------------------------------------------------------------------------- */
-#define LYAPUNOV_K1 1.5f     // Hệ số bù sai số dọc e1
-#define LYAPUNOV_K2 0.00018f // Hệ số ổn định sai số lệch ngang e2
+#define LYAPUNOV_K1 1.5f // Hệ số bù sai số dọc e1
+#define LYAPUNOV_K2                                                            \
+  0.00018f // Hệ số ổn định sai số lệch ngang e2 (giữ tâm đường thẳng & đủ góc
+           // 28.9 độ ôm cua R500 cho cảm biến đầu xe 290mm)
 #define LYAPUNOV_K3                                                            \
-  7.0f // Hệ số ổn định góc hướng e3 (giảm từ 10.0 để chống lắc servo)
+  1.0f // Hệ số ổn định góc hướng e3 (tối ưu cho cảm biến đầu xe l2 = 290mm có
+       // giảm chấn hình học tự nhiên lớn, chống rung lắc tần số cao)
 
 /* --------------------------------------------------------------------------
  * 5. BỘ ĐIỀU KHIỂN TỐC ĐỘ ĐỘNG CƠ PI - INNER LOOP (CHAPTER 5.6)
@@ -81,6 +84,7 @@ static const float LINE_SENSOR_POS_MM[LINE_SENSOR_COUNT] = {
 #define ROBOT_SPEED_MAX_MPS 2.0f // 2.0 m/s
 #define ROBOT_MAX_ACCEL_MPS2                                                   \
   2.5f // Gia tốc thiết kế an toàn 2.5 m/s^2 (tránh bốc đầu)
-#define ROBOT_MAX_STEER_ANGLE_RAD 0.7854f // ~ 45 độ giới hạn servo (pi/4)
+#define ROBOT_MAX_STEER_ANGLE_RAD                                              \
+  1.1345f // ~ 65 độ giới hạn servo (65 * pi / 180)
 
 #endif // ROBOT_CONFIG_H

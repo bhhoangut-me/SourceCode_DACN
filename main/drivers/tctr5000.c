@@ -33,15 +33,13 @@
 
 static adc_oneshot_unit_handle_t s_adc1_handle = NULL;
 
-// Hiệu chuẩn thực nghiệm chuẩn xác từ ảnh thực tế trên sa bàn của bạn:
-// - Nền trắng (White floor): trung bình ~45 - 75 (Ảnh 1 & 2: các mắt trắng từ
-// 35 đến 83)
-// - Vạch đen (Black line): trung bình ~2800 - 2850 (Ảnh 1 Mắt 4 = 2802, Ảnh 2
-// Mắt 4 = 2311, Mắt 5 = 1856)
-static uint16_t s_default_white[LINE_SENSOR_COUNT] = {60, 45, 60, 60,
-                                                      60, 75, 75};
+// Mảng 8 cảm biến IR (pitch 8mm, span 56mm):
+// - Nền trắng (White floor): trung bình ~45 - 75
+// - Vạch đen (Black line): trung bình ~2800 - 2850
+static uint16_t s_default_white[LINE_SENSOR_COUNT] = {60, 50, 60, 60,
+                                                      60, 60, 70, 70};
 static uint16_t s_default_black[LINE_SENSOR_COUNT] = {2800, 2800, 2800, 2850,
-                                                      2850, 2800, 2800};
+                                                      2850, 2800, 2800, 2800};
 
 esp_err_t line_sensor_init(void) {
   // 1. Cấu hình các chân điều khiển MUX HEF4051B (ss1, ss2, ss3) làm ngõ ra
@@ -60,7 +58,7 @@ esp_err_t line_sensor_init(void) {
   gpio_set_level(TCRT_SEL2_GPIO, 0);
   gpio_set_level(TCRT_SEL3_GPIO, 0);
 
-  // 2. Cấu hình ADC Oneshot đọc chân GPIO 32 (ADC1 Channel 4)
+  // 2. Cấu hình ADC Oneshot đọc chân TCRT_ADC_GPIO (GPIO 36 - ADC1 Channel 0)
   adc_oneshot_unit_init_cfg_t init_config1 = {
       .unit_id = ADC_UNIT_1,
       .ulp_mode = ADC_ULP_MODE_DISABLE,
@@ -94,36 +92,16 @@ static void mux_select_channel(uint8_t ch) {
   esp_rom_delay_us(SETTLE_DELAY_US);
 }
 
-// Hàm hiệu chuẩn phi tuyến từng đoạn (Piecewise Linear Calibration) từ dữ liệu
-// thực tế sa bàn:
-// - Lệch 0 cm thật  -> thô  0.0 mm -> ra chuẩn xác   0.0 mm
-// - Lệch 1 cm thật  -> thô  6.3 mm -> ra chuẩn xác  10.0 mm
-// - Lệch 2 cm thật  -> thô 19.5 mm -> ra chuẩn xác  20.0 mm
-// - Lệch 3.9 cm thật -> thô 39.0 mm -> ra chuẩn xác  39.0 mm
+// Hàm hiệu chuẩn vị trí mảng 8 cảm biến (bước 8mm, phạm vi đo [-28mm, +28mm]):
+// Do bước pitch 8mm nhỏ hơn bề rộng vạch line (26mm), vạch line luôn phủ cùng lúc
+// 3-4 cảm biến nên trung bình trọng số đạt độ tuyến tính cao, không bị nén sai số.
 static float calibrate_piecewise_position_mm(float raw_pos_mm) {
   float sign = (raw_pos_mm >= 0.0f) ? 1.0f : -1.0f;
   float abs_pos = fabsf(raw_pos_mm);
-  float calibrated_pos = 0.0f;
 
-  // Đoạn 1: Từ 0 đến 6.3 mm (ứng với lệch 0 đến 10 mm / 1 cm thực tế)
-  // Độ dốc = 10.0 / 6.3 = 1.5873f
-  if (abs_pos <= 6.3f) {
-    calibrated_pos = abs_pos * 1.5873f;
-  }
-  // Đoạn 2: Từ 6.3 mm đến 19.5 mm (ứng với lệch 10 mm đến 20 mm / 2 cm thực tế)
-  // Độ dốc = (20.0 - 10.0) / (19.5 - 6.3) = 10.0 / 13.2 = 0.7576f
-  else if (abs_pos <= 19.5f) {
-    calibrated_pos = 10.0f + (abs_pos - 6.3f) * 0.7576f;
-  }
-  // Đoạn 3: Ngoài 19.5 mm (ứng với lệch ngoài 20 mm đến mép cảm biến 39 mm)
-  // Độ dốc = (39.0 - 20.0) / (39.0 - 19.5) = 19.0 / 19.5 = 0.9744f
-  else {
-    calibrated_pos = 20.0f + (abs_pos - 19.5f) * 0.9744f;
-  }
-
-  if (calibrated_pos > 39.0f)
-    calibrated_pos = 39.0f;
-  return sign * calibrated_pos;
+  if (abs_pos > 28.0f)
+    abs_pos = 28.0f;
+  return sign * abs_pos;
 }
 
 esp_err_t line_sensor_read(line_sensor_data_t *data) {
@@ -135,8 +113,7 @@ esp_err_t line_sensor_read(line_sensor_data_t *data) {
   uint8_t active_count = 0;
 
   for (int i = 0; i < LINE_SENSOR_COUNT; i++) {
-    // Quét tuần tự kênh MUX từ Y0 đến Y6 (đã đảo chân chọn bit trong
-    // pin_config.h)
+    // Quét tuần tự 8 kênh MUX từ Y0 đến Y7
     mux_select_channel(i);
 
     // Đọc bỏ lần đầu để mức điện áp sau khi chuyển kênh MUX được ổn định
@@ -178,9 +155,11 @@ esp_err_t line_sensor_read(line_sensor_data_t *data) {
     }
 
     // Tích lũy trọng số theo vị trí tọa độ của mắt cảm biến
-    // LINE_SENSOR_POS_MM[i]
-    weighted_sum += (float)calib * LINE_SENSOR_POS_MM[i];
-    sum_weights += (float)calib;
+    // LINE_SENSOR_POS_MM[i] (cắt nhiễu nền trắng < 50 để mắt biên ±28mm không
+    // gây rung e2)
+    uint16_t weight = (calib >= 50) ? (uint16_t)calib : 0;
+    weighted_sum += (float)weight * LINE_SENSOR_POS_MM[i];
+    sum_weights += (float)weight;
   }
 
   data->active_sensor_count = active_count;
@@ -189,31 +168,28 @@ esp_err_t line_sensor_read(line_sensor_data_t *data) {
   if (sum_weights < 150.0f) {
     data->line_lost = true;
     data->intersection_detected = false;
-    // Giữ vị trí mép ngoài cùng theo hướng lệch trước đó để xe tiếp tục ôm cua
+    // Giữ vị trí mép ngoài cùng (±28mm) theo hướng lệch trước đó để xe tiếp tục ôm cua
     // tìm lại line
-    if (data->position_mm > 10.0f) {
-      data->position_mm = 39.0f;
-      data->position_m = 0.039f;
-    } else if (data->position_mm < -10.0f) {
-      data->position_mm = -39.0f;
-      data->position_m = -0.039f;
+    if (data->position_mm > 6.0f) {
+      data->position_mm = 28.0f;
+      data->position_m = 0.028f;
+    } else if (data->position_mm < -6.0f) {
+      data->position_mm = -28.0f;
+      data->position_m = -0.028f;
     }
   } else {
     data->line_lost = false;
     // 1. Tính sai số thô theo trung bình trọng số hình học
     float raw_pos_mm = weighted_sum / sum_weights;
 
-    // 2. Hiệu chuẩn từng đoạn phi tuyến theo dữ liệu thực tế sa bàn:
-    // Lệch 0cm -> 0.0 mm
-    // Lệch 1cm -> 10.0 mm
-    // Lệch 2cm -> 20.0 mm
+    // 2. Hiệu chuẩn giới hạn dải đo [-28mm, +28mm]
     data->position_mm = calibrate_piecewise_position_mm(raw_pos_mm);
     data->position_m = data->position_mm / 1000.0f;
 
     // Phát hiện ngã rẽ nhánh / vạch giao cắt:
-    // Khi gặp giao điểm hoặc vạch ngang, phần lớn mảng cảm biến (>= 4 cảm biến)
-    // đều nhìn thấy đen
-    if (active_count >= 4) {
+    // Chỉ kích hoạt khi gặp vạch ngang / ngã rẽ thật sự (ít nhất 7/8 cảm biến thấy đen).
+    // Tránh nhận nhầm khi xe đi chéo góc qua khúc cua gắt R500 (chỉ thấy 4-5 mắt đen).
+    if (active_count >= 7) {
       data->intersection_detected = true;
     } else {
       data->intersection_detected = false;

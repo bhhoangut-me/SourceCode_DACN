@@ -30,6 +30,10 @@ static int s_ws_client_fd = -1;
 static esp_err_t root_get_handler(httpd_req_t *req) {
     const size_t html_len = dashboard_html_end - dashboard_html_start;
     httpd_resp_set_type(req, "text/html; charset=utf-8");
+    // Chống trình duyệt lưu cache trang web, luôn tải bản mới nhất từ ESP32
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache, no-store, must-revalidate");
+    httpd_resp_set_hdr(req, "Pragma", "no-cache");
+    httpd_resp_set_hdr(req, "Expires", "0");
     return httpd_resp_send(req, (const char *)dashboard_html_start, html_len);
 }
 
@@ -184,7 +188,7 @@ void web_server_send_telemetry(const line_sensor_data_t *line_data) {
         return;
     }
 
-    char json_str[256];
+    char json_str[320];
     robot_state_t st = state_get_current();
     float v = control_get_current_speed();
     float steer = control_get_steer_angle_deg();
@@ -196,7 +200,7 @@ void web_server_send_telemetry(const line_sensor_data_t *line_data) {
     snprintf(json_str, sizeof(json_str),
              "{\"v\":%.2f,\"rpm\":%.0f,\"steer\":%.1f,\"servo\":%.1f,\"e2\":%.1f,\"pwm\":%.0f,\"state\":%d,"
              "\"mode\":\"%s\",\"mpwm\":%.0f,"
-             "\"adc\":[%d,%d,%d,%d,%d,%d,%d],\"lost\":%s,\"inter\":%s}",
+             "\"adc\":[%d,%d,%d,%d,%d,%d,%d,%d],\"lost\":%s,\"inter\":%s}",
              v, rpm, steer, servo, e2, pwm, (int)st,
              control_is_manual_mode() ? "manual" : "auto",
              control_get_manual_pwm(),
@@ -207,6 +211,7 @@ void web_server_send_telemetry(const line_sensor_data_t *line_data) {
              line_data ? line_data->raw_adc[4] : 0,
              line_data ? line_data->raw_adc[5] : 0,
              line_data ? line_data->raw_adc[6] : 0,
+             line_data ? line_data->raw_adc[7] : 0,
              (line_data && line_data->line_lost) ? "true" : "false",
              (line_data && line_data->intersection_detected) ? "true" : "false");
 

@@ -17,7 +17,7 @@ esp_err_t mg90s_init(void);
 // Đặt trực tiếp góc Servo từ 0 đến 180 độ (Thẳng = 90 độ)
 esp_err_t mg90s_set_servo_angle(float servo_angle_deg);
 
-// Đặt góc bẻ lái bánh xe delta (-45 đến +45 độ) -> Servo = 90 + delta
+// Đặt góc bẻ lái bánh xe delta (-65 đến +65 độ theo ROBOT_MAX_STEER_ANGLE_RAD) -> Servo = 90 + delta
 esp_err_t mg90s_set_angle_deg(float steer_angle_deg);
 
 // Đặt góc bẻ lái bánh xe delta (radian) -> Servo = 90 + (delta * RAD_TO_DEG)
@@ -26,7 +26,7 @@ esp_err_t mg90s_set_angle_rad(float steer_angle_rad);
 // Lấy góc Servo thực tế hiện tại (0 - 180 độ, thẳng là 90 độ)
 float mg90s_get_servo_angle(void);
 
-// Lấy góc bẻ lái bánh xe hiện tại (-45 đến +45 độ, thẳng là 0 độ)
+// Lấy góc bẻ lái bánh xe hiện tại (-65 đến +65 độ, thẳng là 0 độ)
 float mg90s_get_steering_angle_deg(void);
 
 // Căn chỉnh góc lệch tâm (Trim offset) cơ khí (mặc định 0.0 độ)
