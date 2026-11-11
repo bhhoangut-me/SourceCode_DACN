@@ -81,8 +81,8 @@ esp_err_t mg90s_set_servo_angle(float servo_angle_deg) {
 }
 
 esp_err_t mg90s_set_angle_deg(float steer_angle_deg) {
-    // 1. Giới hạn an toàn góc bẻ lái theo cấu hình ROBOT_MAX_STEER_ANGLE_RAD (~65 độ)
-    float max_steer = ROBOT_MAX_STEER_ANGLE_RAD * RAD_TO_DEG;
+    // 1. Giới hạn an toàn góc bẻ lái cơ học của bánh trước (-55 độ đến +55 độ)
+    float max_steer = ROBOT_MAX_STEER_ANGLE_RAD * RAD_TO_DEG; // ~55.0 độ
     if (steer_angle_deg > max_steer)  steer_angle_deg = max_steer;
     if (steer_angle_deg < -max_steer) steer_angle_deg = -max_steer;
 

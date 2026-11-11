@@ -58,7 +58,7 @@ esp_err_t line_sensor_init(void) {
   gpio_set_level(TCRT_SEL2_GPIO, 0);
   gpio_set_level(TCRT_SEL3_GPIO, 0);
 
-  // 2. Cấu hình ADC Oneshot đọc chân TCRT_ADC_GPIO (GPIO 36 - ADC1 Channel 0)
+  // 2. Cấu hình ADC Oneshot đọc chân GPIO 32 (ADC1 Channel 4)
   adc_oneshot_unit_init_cfg_t init_config1 = {
       .unit_id = ADC_UNIT_1,
       .ulp_mode = ADC_ULP_MODE_DISABLE,
@@ -113,7 +113,8 @@ esp_err_t line_sensor_read(line_sensor_data_t *data) {
   uint8_t active_count = 0;
 
   for (int i = 0; i < LINE_SENSOR_COUNT; i++) {
-    // Quét tuần tự 8 kênh MUX từ Y0 đến Y7
+    // Quét tuần tự kênh MUX từ Y0 đến Y6 (đã đảo chân chọn bit trong
+    // pin_config.h)
     mux_select_channel(i);
 
     // Đọc bỏ lần đầu để mức điện áp sau khi chuyển kênh MUX được ổn định

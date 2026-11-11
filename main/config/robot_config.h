@@ -13,13 +13,11 @@
  * -------------------------------------------------------------------------- */
 #define ROBOT_MASS_KG 1.5f    // Khối lượng xe M (kg)
 #define ROBOT_WIDTH_M 0.15f   // Vệt bánh sau w (m) = 150 mm
-#define ROBOT_LENGTH_M                                                         \
-  0.225f // Chiều dài cơ sở trục sau -> trục lái trước l (m) = 225 mm
+#define ROBOT_LENGTH_M 0.225f // Chiều dài cơ sở l (m) = 225 mm
 #define ROBOT_L1_M                                                             \
-  0.05f // Khoảng cách từ trục sau đến trọng tâm G l1 (m) = 50 mm (Chương 3)
+  0.05f // Khoảng cách từ trục sau đến trục lái / CG l1 (m) = 50 mm
 #define ROBOT_L2_M                                                             \
-  0.290f // Khoảng cách từ trục sau đến mảng cảm biến đầu xe l2 (m) = 290 mm
-         // (Bản vẽ lắp A0)
+  0.175f // Khoảng cách từ trọng tâm G / trục sau đến cảm biến l2 (m)
 #define ROBOT_CG_HEIGHT_M 0.05f // Chiều cao trọng tâm h (m) = 50 mm
 
 #define WHEEL_DIAMETER_M 0.08f // Đường kính bánh dẫn động sau D (m) = 80 mm
@@ -56,11 +54,11 @@ static const float LINE_SENSOR_POS_MM[LINE_SENSOR_COUNT] = {
  * -------------------------------------------------------------------------- */
 #define LYAPUNOV_K1 1.5f // Hệ số bù sai số dọc e1
 #define LYAPUNOV_K2                                                            \
-  0.00018f // Hệ số cơ sở sai số lệch ngang e2 (kết hợp hàm nén bậc 3 quanh tâm
-           // giữ êm đường thẳng & mở đủ góc 28.6..38 độ ôm cua R500)
+  0.00018f // Hệ số ổn định sai số lệch ngang e2 (giữ tâm đường thẳng & ôm cua
+           // R500 với L_eff = 0.12m)
 #define LYAPUNOV_K3                                                            \
-  0.40f // Hệ số giảm chấn góc hướng e3 (cảm biến mũi xe l2 = 290mm đã có giảm
-        // chấn hình học tự nhiên lớn, giảm K3 tránh tự kích nhiễu quét mũi xe)
+  2.5f // Hệ số ổn định góc hướng e3 (hạ tương ứng với L_eff = 0.12m để giảm chấn
+       // êm, chống tự kích dao động)
 
 /* --------------------------------------------------------------------------
  * 5. BỘ ĐIỀU KHIỂN TỐC ĐỘ ĐỘNG CƠ PI - INNER LOOP (CHAPTER 5.6)
