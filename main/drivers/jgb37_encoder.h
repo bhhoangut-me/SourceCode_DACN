@@ -9,9 +9,8 @@ extern "C" {
 #endif
 
 // Số xung trên 1 vòng trục động cơ (xung/vòng)
-// Thường là 11 xung/pha * số cạnh hoặc 330 xung sau hộp số
 #ifndef ENCODER_PPR
-#define ENCODER_PPR                 330.0f
+#define ENCODER_PPR                 400.0f
 #endif
 
 // Khởi tạo đọc xung Encoder JGB37 qua GPIO ngắt

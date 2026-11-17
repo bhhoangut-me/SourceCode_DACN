@@ -17,9 +17,12 @@ typedef struct {
     uint16_t max_black[LINE_SENSOR_COUNT];     // Mức vạch đen
     float position_mm;                         // Độ lệch tâm e2 (mm) [-28.0 đến +28.0]
     float position_m;                          // Độ lệch tâm e2 (m)
+    float left_branch_pos_mm;                  // Vị trí e2 (mm) của cụm nhánh TRÁI (Sensor Masking)
+    float right_branch_pos_mm;                 // Vị trí e2 (mm) của cụm nhánh PHẢI (Sensor Masking)
     bool line_lost;                            // Cờ báo mất line
     bool intersection_detected;                // Cờ phát hiện vạch ngang / ngã rẽ nhánh
     uint8_t active_sensor_count;               // Số cảm biến đang nằm trên line đen
+    uint8_t cluster_count;                     // Số cụm vạch đen tách biệt (1: line đơn, >=2: tách chữ Y)
 } line_sensor_data_t;
 
 // Khởi tạo GPIO MUX và ADC1 đọc mảng TCRT5000 / IR 8 mắt

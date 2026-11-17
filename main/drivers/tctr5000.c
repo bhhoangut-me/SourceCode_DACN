@@ -169,6 +169,7 @@ esp_err_t line_sensor_read(line_sensor_data_t *data) {
   if (sum_weights < 150.0f) {
     data->line_lost = true;
     data->intersection_detected = false;
+    data->cluster_count = 0;
     // Giữ vị trí mép ngoài cùng (±28mm) theo hướng lệch trước đó để xe tiếp tục ôm cua
     // tìm lại line
     if (data->position_mm > 6.0f) {
@@ -178,23 +179,110 @@ esp_err_t line_sensor_read(line_sensor_data_t *data) {
       data->position_mm = -28.0f;
       data->position_m = -0.028f;
     }
+    data->left_branch_pos_mm = data->position_mm;
+    data->right_branch_pos_mm = data->position_mm;
   } else {
     data->line_lost = false;
-    // 1. Tính sai số thô theo trung bình trọng số hình học
+    // 1. Tính sai số thô theo trung bình trọng số hình học toàn mảng
     float raw_pos_mm = weighted_sum / sum_weights;
 
     // 2. Hiệu chuẩn giới hạn dải đo [-28mm, +28mm]
     data->position_mm = calibrate_piecewise_position_mm(raw_pos_mm);
     data->position_m = data->position_mm / 1000.0f;
 
-    // Phát hiện ngã rẽ nhánh / vạch giao cắt:
-    // Chỉ kích hoạt khi gặp vạch ngang / ngã rẽ thật sự (ít nhất 7/8 cảm biến thấy đen).
-    // Tránh nhận nhầm khi xe đi chéo góc qua khúc cua gắt R500 (chỉ thấy 4-5 mắt đen).
-    if (active_count >= 7) {
+    // 3. Phân tích cụm vạch đen (Cluster Analysis) & độ trải rộng (Span)
+    //    để nhận diện ngã 3 chữ Y (tách 2 đỉnh đen) hoặc ngã 3 chữ T (vạch phình rộng)
+    uint8_t clusters = 0;
+    bool in_cluster = false;
+    int first_active = -1;
+    int last_active = -1;
+
+    for (int i = 0; i < LINE_SENSOR_COUNT; i++) {
+      if (data->calibrated[i] > 300) {
+        if (first_active < 0) first_active = i;
+        last_active = i;
+        if (!in_cluster) {
+          clusters++;
+          in_cluster = true;
+        }
+      } else if (data->calibrated[i] < 240) {
+        // Có khe trắng / điểm lõm ngăn cách giữa 2 nhánh đen
+        in_cluster = false;
+      }
+    }
+    data->cluster_count = clusters;
+    int span = (first_active >= 0 && last_active >= first_active)
+                   ? (last_active - first_active + 1)
+                   : 0;
+
+    // Phát hiện ngã 3 cực nhạy khi:
+    // - Dấu hiệu 1 (Tách đôi chữ Y): Xuất hiện >= 2 cụm vạch đen tách biệt; HOẶC
+    // - Dấu hiệu 2 (Độ trải rộng vạch): Khoảng cách từ mắt đen trái nhất đến phải nhất >= 5 mắt (>= 40mm,
+    //   lớn hơn bề rộng 1 line đơn 26mm nên chắc chắn là ngã rẽ dù ở giữa đã tách khe trắng hay chưa)
+    if (clusters >= 2 || span >= 5) {
       data->intersection_detected = true;
     } else {
       data->intersection_detected = false;
     }
+
+    // 4. Kỹ thuật Sensor Masking (Che mặt nạ cảm biến cho từng nhánh):
+    // - Nhánh TRÁI (left_branch_pos_mm): Quét từ trái sang phải (S1 -> S8),
+    //   chỉ lấy cụm mắt đen đầu tiên bên trái (tối đa 3 mắt ~ 24mm bề rộng 1 line),
+    //   che toàn bộ các mắt thuộc nhánh bên phải.
+    float left_w_sum = 0.0f, left_w_total = 0.0f;
+    bool found_left = false;
+    int left_taken = 0;
+    for (int i = 0; i < LINE_SENSOR_COUNT; i++) {
+      uint16_t c = data->calibrated[i];
+      if (!found_left) {
+        if (c >= 250) {
+          found_left = true;
+          left_w_sum += (float)c * LINE_SENSOR_POS_MM[i];
+          left_w_total += (float)c;
+          left_taken = 1;
+        }
+      } else {
+        if (c >= 180 && left_taken < 3) {
+          left_w_sum += (float)c * LINE_SENSOR_POS_MM[i];
+          left_w_total += (float)c;
+          left_taken++;
+        } else {
+          break; // Kết thúc cụm nhánh trái, che toàn bộ phần bên phải
+        }
+      }
+    }
+    data->left_branch_pos_mm = (left_w_total > 50.0f)
+        ? calibrate_piecewise_position_mm(left_w_sum / left_w_total)
+        : data->position_mm;
+
+    // - Nhánh PHẢI (right_branch_pos_mm): Quét từ phải sang trái (S8 -> S1),
+    //   chỉ lấy cụm mắt đen đầu tiên bên phải (tối đa 3 mắt ~ 24mm bề rộng 1 line),
+    //   che toàn bộ các mắt thuộc nhánh bên trái.
+    float right_w_sum = 0.0f, right_w_total = 0.0f;
+    bool found_right = false;
+    int right_taken = 0;
+    for (int i = LINE_SENSOR_COUNT - 1; i >= 0; i--) {
+      uint16_t c = data->calibrated[i];
+      if (!found_right) {
+        if (c >= 250) {
+          found_right = true;
+          right_w_sum += (float)c * LINE_SENSOR_POS_MM[i];
+          right_w_total += (float)c;
+          right_taken = 1;
+        }
+      } else {
+        if (c >= 180 && right_taken < 3) {
+          right_w_sum += (float)c * LINE_SENSOR_POS_MM[i];
+          right_w_total += (float)c;
+          right_taken++;
+        } else {
+          break; // Kết thúc cụm nhánh phải, che toàn bộ phần bên trái
+        }
+      }
+    }
+    data->right_branch_pos_mm = (right_w_total > 50.0f)
+        ? calibrate_piecewise_position_mm(right_w_sum / right_w_total)
+        : data->position_mm;
   }
 
   return ESP_OK;
